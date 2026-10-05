@@ -1,0 +1,87 @@
+trigger:
+  branches:
+    include:
+      - 10.0
+
+pr:
+  branches:
+    include:
+      - 10.0
+
+pool:
+  vmImage: windows-2022
+
+variables:
+  buildConfiguration: Release
+  dotnetSdkVersion: 10.0.x
+  artifactName: webapp-drop
+  webProject: WinFormsApp1/WinFormsApp1.csproj
+
+steps:
+  - task: UseDotNet@2
+    displayName: Instalar .NET SDK $(dotnetSdkVersion)
+    inputs:
+      packageType: sdk
+      version: $(dotnetSdkVersion)
+
+  - task: PowerShell@2
+    displayName: Instalación de dependencias (dotnet restore)
+    inputs:
+      targetType: inline
+      pwsh: true
+      script: |
+        $projects = Get-ChildItem -Path "$(System.DefaultWorkingDirectory)" -Recurse -Filter *.csproj
+        foreach ($project in $projects) {
+          Write-Host "Restaurando $($project.FullName)"
+          dotnet restore "$($project.FullName)"
+        }
+
+  - script: dotnet build $(webProject) --configuration $(buildConfiguration) --no-restore
+    displayName: Compilación
+
+  - task: PowerShell@2
+    displayName: Pruebas unitarias e integración
+    inputs:
+      targetType: inline
+      pwsh: true
+      script: |
+        $resultsDir = "$(System.DefaultWorkingDirectory)/test-results"
+        New-Item -Path $resultsDir -ItemType Directory -Force | Out-Null
+
+        $testProjects = Get-ChildItem -Path "$(System.DefaultWorkingDirectory)" -Recurse -Filter *Tests.csproj
+        foreach ($testProject in $testProjects) {
+          Write-Host "Ejecutando pruebas en $($testProject.FullName)"
+          dotnet test "$($testProject.FullName)" --configuration $(buildConfiguration) --no-restore `
+            --logger "trx;LogFileName=$($testProject.BaseName).trx" `
+            --results-directory "$resultsDir" `
+            --collect:"XPlat Code Coverage"
+        }
+
+  - task: PublishTestResults@2
+    displayName: Publicar resultados de pruebas
+    condition: succeededOrFailed()
+    inputs:
+      testResultsFormat: VSTest
+      testResultsFiles: '$(System.DefaultWorkingDirectory)/test-results/**/*.trx'
+      mergeTestResults: true
+      failTaskOnFailedTests: true
+      testRunTitle: 'Resultados de pruebas CI'
+
+  - task: PublishCodeCoverageResults@2
+    displayName: Publicar cobertura de código
+    condition: succeededOrFailed()
+    inputs:
+      summaryFileLocation: '$(System.DefaultWorkingDirectory)/**/coverage.cobertura.xml'
+      pathToSources: '$(System.DefaultWorkingDirectory)'
+      failIfCoverageEmpty: true
+
+  - script: |
+      dotnet publish $(webProject) --configuration $(buildConfiguration) --no-build --output "$(Build.ArtifactStagingDirectory)/publish"
+    displayName: Empaquetar aplicación
+
+  - task: PublishBuildArtifacts@1
+    displayName: Crear artefacto
+    inputs:
+      PathtoPublish: '$(Build.ArtifactStagingDirectory)/publish'
+      ArtifactName: $(artifactName)
+      publishLocation: Container

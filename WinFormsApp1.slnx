@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/Elementos de la solución/">
+    <File Path="actualizacion.md" />
+    <File Path="pipeline.md" />
+    <File Path="spec.md" />
+  </Folder>
+  <Project Path="WinFormsApp1.Core.Tests/WinFormsApp1.Core.Tests.csproj" />
+  <Project Path="WinFormsApp1.Core/WinFormsApp1.Core.csproj" />
+  <Project Path="WinFormsApp1.UI.Tests/WinFormsApp1.UI.Tests.csproj" />
+  <Project Path="WinFormsApp1/WinFormsApp1.csproj" />
+</Solution>
